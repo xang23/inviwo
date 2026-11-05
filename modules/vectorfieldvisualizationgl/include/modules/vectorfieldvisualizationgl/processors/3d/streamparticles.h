@@ -44,6 +44,8 @@
 #include <inviwo/core/util/glmvec.h>
 #include <inviwo/core/util/staticstring.h>
 #include <inviwo/core/util/timer.h>
+#include <inviwo/core/properties/boolproperty.h>
+#include <inviwo/core/properties/buttonproperty.h>
 #include <modules/opengl/shader/shader.h>
 #include <modules/vectorfieldvisualization/ports/seedpointsport.h>
 
@@ -73,6 +75,8 @@ private:
     void initBuffers();
     void reseed();
     void advect();
+    void resetSimulation();
+    void updateTrailSampling(float dt);
 
     enum class SeedingSpace { Data, World };
     VolumeInport volume_;
@@ -90,12 +94,18 @@ private:
     TransferFunctionProperty tf_;
 
     FloatProperty reseedInterval_;
+    BoolProperty running_;
+    ButtonProperty resetSimulation_;
+    FloatProperty trailSampleInterval_;
 
     Shader shader_;
     Timer timer_;
     double reseedtime_;
     double prevT_;
     Clock clock_;
+    double simulationTime_;
+    double trailSampleAccumulator_;
+    bool writeTrailSample_;
     bool ready_;
     bool buffersDirty_;
 

@@ -82,6 +82,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <cmath>
 
 #include <glm/detail/qualifier.hpp>
 #include <glm/mat4x4.hpp>
@@ -156,11 +157,17 @@ StreamParticles::StreamParticles()
                           .set("Seconds between reseeding. When reseeding particles whose "
                                "life is zero will get new position by selecting (randomly) "
                                "from the input seed vector"_help)}
+    , running_{"running", "Run Simulation", true}
+    , resetSimulation_{"resetSimulation", "Reset Simulation"}
+    , trailSampleInterval_{"trailSampleInterval", "Trail Sample Interval", 0.05f, 0.001f, 1.0f}
     , shader_{{{ShaderType::Compute, std::string{"streamparticles.comp"}}}, Shader::Build::No}
     , timer_{Timer::Milliseconds(17), [&]() { update(); }}
     , reseedtime_{0.0}
     , prevT_{0}
     , clock_{}
+    , simulationTime_{0.0}
+    , trailSampleAccumulator_{0.0}
+    , writeTrailSample_{false}
     , ready_{false}
     , buffersDirty_{true} {
 
@@ -169,11 +176,16 @@ StreamParticles::StreamParticles()
     addPort(meshPort_);
 
     addProperties(seedingSpace_, advectionSpeed_, internalSteps_, particleSize_, minV_, maxV_, tf_,
-                  reseedInterval_);
+                  reseedInterval_, running_, resetSimulation_, trailSampleInterval_);
 
     shader_.onReload([this]() {
         invalidate(InvalidationLevel::InvalidOutput);
         buffersDirty_ = true;
+    });
+
+    resetSimulation_.onChange([this]() {
+        resetSimulation();
+        invalidate(InvalidationLevel::InvalidOutput);
     });
 
     timer_.start();
@@ -199,8 +211,18 @@ void StreamParticles::process() {
         initBuffers();
     }
 
-    reseed();
-    advect();
+    if (running_.get()) {
+        reseed();
+        advect();
+    } else {
+        // Prevent a large timestep and immediate reseed after resuming.
+        const auto currentTime = clock_.getElapsedSeconds();
+        prevT_ = currentTime;
+        reseedtime_ = currentTime;
+
+        writeTrailSample_ = false;
+    }
+
     meshPort_.setData(mesh_);
     ready_ = true;
 }
@@ -302,6 +324,9 @@ void StreamParticles::advect() {
     const auto dt = t - prevT_;
     prevT_ = t;
 
+    const float clampedDt = std::min(static_cast<float>(dt), 0.1f);
+    updateTrailSampling(clampedDt);
+
     const auto volume = volume_.getData();
 
     auto bufPosGL = bufPos_->getEditableRepresentation<BufferGL>();
@@ -312,7 +337,7 @@ void StreamParticles::advect() {
     shader_.activate();
 
     // using min(dt,0.1) prevent big jumps when execution is slow / have been paused
-    shader_.setUniform("dt", std::min(static_cast<float>(dt), 0.1f));
+    shader_.setUniform("dt", clampedDt);
     utilgl::setUniforms(shader_, advectionSpeed_, internalSteps_, minV_, maxV_);
     utilgl::bindAndSetUniforms(shader_, cont, tf_);
 
@@ -338,6 +363,35 @@ void StreamParticles::advect() {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, 0);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, 0);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, 0);
+}
+
+void StreamParticles::resetSimulation() {
+    simulationTime_ = 0.0;
+    trailSampleAccumulator_ = 0.0;
+    writeTrailSample_ = false;
+
+    const auto currentTime = clock_.getElapsedSeconds();
+
+    prevT_ = currentTime;
+    reseedtime_ = currentTime;
+
+    buffersDirty_ = true;
+    ready_ = false;
+}
+
+void StreamParticles::updateTrailSampling(float dt) {
+    writeTrailSample_ = false;
+
+    simulationTime_ += static_cast<double>(dt);
+    trailSampleAccumulator_ += static_cast<double>(dt);
+
+    const double sampleInterval = static_cast<double>(trailSampleInterval_.get());
+
+    if (trailSampleAccumulator_ >= sampleInterval) {
+        writeTrailSample_ = true;
+
+        trailSampleAccumulator_ = std::fmod(trailSampleAccumulator_, sampleInterval);
+    }
 }
 
 }  // namespace inviwo
