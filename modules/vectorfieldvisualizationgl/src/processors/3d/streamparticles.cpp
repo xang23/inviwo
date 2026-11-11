@@ -317,9 +317,13 @@ void StreamParticles::reseed() {
 
         auto& positions = bufPos_->getEditableRAMRepresentation()->getDataContainer();
         auto& lifes = bufLife_->getEditableRAMRepresentation()->getDataContainer();
+        auto& trailCounts = bufTrailCount_->getEditableRAMRepresentation()->getDataContainer();
+        if (seeds->empty()) {
+            return;
+        }
 
         std::mt19937 rand;
-        std::uniform_int_distribution<size_t> dist(0, seeds->size());
+        std::uniform_int_distribution<size_t> dist(0, seeds->size() - 1);
 
         const auto seedTransform =
             [space = seedingSpace_.get(),
@@ -333,10 +337,15 @@ void StreamParticles::reseed() {
             }
         };
 
-        for (const auto z : util::zip(positions, lifes)) {
-            if (get<1>(z) <= 0) {
-                get<0>(z) = seedTransform((*seeds)[dist(rand)]);
-                get<1>(z) = 1.0f;
+        for (const auto z : util::zip(positions, lifes, trailCounts)) {
+            auto& position = get<0>(z);
+            auto& life = get<1>(z);
+            auto& trailCount = get<2>(z);
+
+            if (life <= 0.0f){
+                position = seedTransform((*seeds)[dist(rand)]);
+                life = 1.0f;
+                trailCount = 0u;
             }
         }
 

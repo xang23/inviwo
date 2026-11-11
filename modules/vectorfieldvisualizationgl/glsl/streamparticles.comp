@@ -99,4 +99,10 @@ void main() {
     col[gid] = applyTF(tf, v);
     radius[gid] = mix(0, mix(minR, maxR, v), life[gid] > 0);
     pos[gid] = vec4(p, 1);
+
+    if (writeTrailSample) {
+        const uint trailIndex = gid * trailLength + trailHead;
+        trailPos[trailIndex] = vec4(p, 1.0);
+        trailCount[gid] = min(trailCount[gid] + 1u, trailLength);
+    }
 }

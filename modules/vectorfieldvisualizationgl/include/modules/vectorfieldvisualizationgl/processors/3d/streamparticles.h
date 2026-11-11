@@ -54,6 +54,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <cstdint>
 
 namespace inviwo {
 class InviwoApplication;
@@ -97,6 +98,7 @@ private:
     BoolProperty running_;
     ButtonProperty resetSimulation_;
     FloatProperty trailSampleInterval_;
+    IntProperty trailLength_;
 
     Shader shader_;
     Timer timer_;
@@ -106,6 +108,7 @@ private:
     double simulationTime_;
     double trailSampleAccumulator_;
     bool writeTrailSample_;
+    size_t trailHead_;
     bool ready_;
     bool buffersDirty_;
 
@@ -114,6 +117,8 @@ private:
     std::shared_ptr<Buffer<float>> bufLife_;
     std::shared_ptr<Buffer<float>> bufRad_;
     std::shared_ptr<Buffer<vec4>> bufCol_;
+    std::shared_ptr<Buffer<vec4>> bufTrailPos_;
+    std::shared_ptr<Buffer<uint32_t>> bufTrailCount_;
 };
 
 }  // namespace inviwo
