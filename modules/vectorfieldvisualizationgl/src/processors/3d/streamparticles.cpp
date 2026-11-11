@@ -160,6 +160,7 @@ StreamParticles::StreamParticles()
     , running_{"running", "Run Simulation", true}
     , resetSimulation_{"resetSimulation", "Reset Simulation"}
     , trailSampleInterval_{"trailSampleInterval", "Trail Sample Interval", 0.05f, 0.001f, 1.0f}
+    , trailLength_{"trailLength", "Trail Length", 30, 2, 200}
     , shader_{{{ShaderType::Compute, std::string{"streamparticles.comp"}}}, Shader::Build::No}
     , timer_{Timer::Milliseconds(17), [&]() { update(); }}
     , reseedtime_{0.0}
@@ -168,6 +169,7 @@ StreamParticles::StreamParticles()
     , simulationTime_{0.0}
     , trailSampleAccumulator_{0.0}
     , writeTrailSample_{false}
+    , trailHead_{0}
     , ready_{false}
     , buffersDirty_{true} {
 
@@ -176,7 +178,7 @@ StreamParticles::StreamParticles()
     addPort(meshPort_);
 
     addProperties(seedingSpace_, advectionSpeed_, internalSteps_, particleSize_, minV_, maxV_, tf_,
-                  reseedInterval_, running_, resetSimulation_, trailSampleInterval_);
+                  reseedInterval_, running_, resetSimulation_, trailSampleInterval_, trailLength_);
 
     shader_.onReload([this]() {
         invalidate(InvalidationLevel::InvalidOutput);
@@ -187,6 +189,8 @@ StreamParticles::StreamParticles()
         resetSimulation();
         invalidate(InvalidationLevel::InvalidOutput);
     });
+
+    trailLength_.onChange([this]() { buffersDirty_ = true; });
 
     timer_.start();
 }
@@ -248,11 +252,32 @@ void StreamParticles::initBuffers() {
     bufRad_ = std::make_shared<Buffer<float>>(numPoints, BufferUsage::Dynamic);
     bufCol_ = std::make_shared<Buffer<vec4>>(numPoints, BufferUsage::Dynamic);
 
+    const auto trailLength = static_cast<size_t>(trailLength_.get());
+    if (numPoints > 0 && trailLength > std::numeric_limits<size_t>::max() / numPoints) {
+        throw Exception(SourceContext{},
+                        "Particle trail buffer size overflow: {} particles times {} samples",
+                        numPoints, trailLength);
+    }
+
+    const auto numTrailPositions = numPoints * trailLength;
+
+    bufTrailPos_ = std::make_shared<Buffer<vec4>>(numTrailPositions, BufferUsage::Dynamic);
+    bufTrailCount_ = std::make_shared<Buffer<uint32_t>>(numPoints, BufferUsage::Dynamic);
+
+
     std::mt19937 rand;
     std::uniform_real_distribution<float> dist(0, 1);
 
     auto& positions = bufPos_->getEditableRAMRepresentation()->getDataContainer();
     auto& lifes = bufLife_->getEditableRAMRepresentation()->getDataContainer();
+    auto& trailPositions = bufTrailPos_->getEditableRAMRepresentation()->getDataContainer();
+
+    auto& trailCounts = bufTrailCount_->getEditableRAMRepresentation()->getDataContainer();
+
+    std::fill(trailPositions.begin(), trailPositions.end(), vec4{0.0f});
+    std::fill(trailCounts.begin(), trailCounts.end(), uint32_t{0});
+
+    trailHead_ = 0;
 
     if (seedingSpace_.get() == SeedingSpace::World) {
         std::transform(seeds->begin(), seeds->end(), positions.begin(),
@@ -273,6 +298,8 @@ void StreamParticles::initBuffers() {
     bufLife_->getEditableRepresentation<BufferGL>();
     bufRad_->getEditableRepresentation<BufferGL>();
     bufCol_->getEditableRepresentation<BufferGL>();
+    bufTrailPos_->getEditableRepresentation<BufferGL>();
+    bufTrailCount_->getEditableRepresentation<BufferGL>();
 
     mesh_ = std::make_shared<Mesh>();
     mesh_->addBuffer(BufferType::PositionAttrib, bufPos_);
@@ -333,10 +360,11 @@ void StreamParticles::advect() {
     auto bufLifeGL = bufLife_->getEditableRepresentation<BufferGL>();
     auto bufRadGL = bufRad_->getEditableRepresentation<BufferGL>();
     auto bufColGL = bufCol_->getEditableRepresentation<BufferGL>();
+    auto bufTrailPosGL = bufTrailPos_->getEditableRepresentation<BufferGL>();
+    auto bufTrailCountGL = bufTrailCount_->getEditableRepresentation<BufferGL>();
 
     shader_.activate();
 
-    // using min(dt,0.1) prevent big jumps when execution is slow / have been paused
     shader_.setUniform("dt", clampedDt);
     utilgl::setUniforms(shader_, advectionSpeed_, internalSteps_, minV_, maxV_);
     utilgl::bindAndSetUniforms(shader_, cont, tf_);
@@ -346,29 +374,41 @@ void StreamParticles::advect() {
     shader_.setUniform("toTextureMatrix",
                        volume->getCoordinateTransformer().getWorldToTextureMatrix());
 
+    shader_.setUniform("trailLength", static_cast<unsigned int>(trailLength_.get()));
+    shader_.setUniform("trailHead", static_cast<unsigned int>(trailHead_));
+    shader_.setUniform("writeTrailSample", writeTrailSample_);
+
     utilgl::bindAndSetUniforms(shader_, cont, *volume, "velocityField");
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, bufPosGL->getId());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, bufLifeGL->getId());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, bufRadGL->getId());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, bufColGL->getId());
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, bufTrailPosGL->getId());
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, bufTrailCountGL->getId());
 
     glDispatchCompute(static_cast<GLuint>(seeds_.getData()->size()), 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
     glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
 
+    if (writeTrailSample_) {
+        trailHead_ = (trailHead_ + 1) % static_cast<size_t>(trailLength_.get());
+    }
     shader_.deactivate();
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, 0);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, 0);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, 0);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, 0);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, 0);
 }
 
 void StreamParticles::resetSimulation() {
     simulationTime_ = 0.0;
     trailSampleAccumulator_ = 0.0;
     writeTrailSample_ = false;
+    trailHead_ = 0;
 
     const auto currentTime = clock_.getElapsedSeconds();
 
