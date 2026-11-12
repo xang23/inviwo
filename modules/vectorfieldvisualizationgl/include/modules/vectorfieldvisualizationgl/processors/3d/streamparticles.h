@@ -48,6 +48,7 @@
 #include <inviwo/core/properties/buttonproperty.h>
 #include <modules/opengl/shader/shader.h>
 #include <modules/vectorfieldvisualization/ports/seedpointsport.h>
+#include <modules/vectorfieldvisualizationgl/datastructures/particlepathlines.h>
 
 #include <functional>
 #include <memory>
@@ -83,6 +84,7 @@ private:
     VolumeInport volume_;
     SeedPoints3DInport seeds_;
     MeshOutport meshPort_;
+    ParticlePathlinesOutport pathlinesPort_;
     OptionProperty<SeedingSpace> seedingSpace_;
 
     FloatProperty advectionSpeed_;

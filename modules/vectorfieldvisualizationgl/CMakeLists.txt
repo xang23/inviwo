@@ -5,6 +5,7 @@ ivw_module(VectorFieldVisualizationGL)
 #--------------------------------------------------------------------
 # Add header files
 set(HEADER_FILES
+    include/modules/vectorfieldvisualizationgl/datastructures/particlepathlines.h
     include/modules/vectorfieldvisualizationgl/processors/2d/hedgehog2d.h
     include/modules/vectorfieldvisualizationgl/processors/2d/lic2d.h
     include/modules/vectorfieldvisualizationgl/processors/2d/vector2dcurl.h

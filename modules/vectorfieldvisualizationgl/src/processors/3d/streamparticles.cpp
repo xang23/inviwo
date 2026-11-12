@@ -114,6 +114,7 @@ StreamParticles::StreamParticles()
     , meshPort_{"particles",
                 "Mesh containing position, color and radii buffers. Can be "
                 "connected to (for example) the Sphere Renderer Processor to render them"_help}
+    , pathlinesPort_{"pathlines", "Particle pathline history"_help}
     , seedingSpace_{"seedingSpace",
                     "Seeding Space",
                     "Tells the processor which space the seeds are defined in"_help,
@@ -176,6 +177,7 @@ StreamParticles::StreamParticles()
     addPort(volume_);
     addPort(seeds_);
     addPort(meshPort_);
+    addPort(pathlinesPort_);
 
     addProperties(seedingSpace_, advectionSpeed_, internalSteps_, particleSize_, minV_, maxV_, tf_,
                   reseedInterval_, running_, resetSimulation_, trailSampleInterval_, trailLength_);
@@ -228,6 +230,9 @@ void StreamParticles::process() {
     }
 
     meshPort_.setData(mesh_);
+    pathlinesPort_.setData(
+        std::make_shared<ParticlePathlines>(bufTrailPos_, bufTrailCount_, seeds_.getData()->size(),
+                                            static_cast<size_t>(trailLength_.get()), trailHead_));
     ready_ = true;
 }
 
