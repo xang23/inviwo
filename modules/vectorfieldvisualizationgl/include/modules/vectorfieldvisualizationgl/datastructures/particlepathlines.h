@@ -20,10 +20,16 @@ namespace inviwo {
 class IVW_MODULE_VECTORFIELDVISUALIZATIONGL_API ParticlePathlines {
 public:
     ParticlePathlines(std::shared_ptr<Buffer<vec4>> positions,
-                      std::shared_ptr<Buffer<uint32_t>> validCounts, size_t particleCount,
-                      size_t trailLength, size_t trailHead)
+                      std::shared_ptr<Buffer<uint32_t>> validCounts,
+                      std::shared_ptr<Buffer<vec4>> trailColors, size_t particleCount,
+                      size_t trailLength, size_t trailHead,
+                      std::shared_ptr<Buffer<vec4>> currentPositions = nullptr,
+                      std::shared_ptr<Buffer<vec4>> currentColors = nullptr)
         : positions_{std::move(positions)}
         , validCounts_{std::move(validCounts)}
+        , trailColors_{std::move(trailColors)}
+        , currentPositions_{std::move(currentPositions)}
+        , currentColors_{std::move(currentColors)}
         , particleCount_{particleCount}
         , trailLength_{trailLength}
         , trailHead_{trailHead} {}
@@ -31,6 +37,12 @@ public:
     const std::shared_ptr<Buffer<vec4>>& getPositions() const { return positions_; }
 
     const std::shared_ptr<Buffer<uint32_t>>& getValidCounts() const { return validCounts_; }
+
+    const std::shared_ptr<Buffer<vec4>>& getTrailColor() const { return trailColors_; }
+
+    const std::shared_ptr<Buffer<vec4>>& getCurrentPositions() const { return currentPositions_; }
+
+    const std::shared_ptr<Buffer<vec4>>& getCurrentColors() const { return currentColors_; }
 
     size_t getParticleCount() const { return particleCount_; }
 
@@ -41,6 +53,12 @@ public:
 private:
     std::shared_ptr<Buffer<vec4>> positions_;
     std::shared_ptr<Buffer<uint32_t>> validCounts_;
+    std::shared_ptr<Buffer<vec4>> trailColors_;
+
+    // Optional live particle data. These point at the already existing
+    // StreamParticles buffers. No data is copied here.
+    std::shared_ptr<Buffer<vec4>> currentPositions_;
+    std::shared_ptr<Buffer<vec4>> currentColors_;
 
     size_t particleCount_;
     size_t trailLength_;
@@ -71,7 +89,6 @@ struct DataTraits<ParticlePathlines> {
 };
 
 using ParticlePathlinesInport = DataInport<ParticlePathlines>;
-
 using ParticlePathlinesOutport = DataOutport<ParticlePathlines>;
 
 }  // namespace inviwo

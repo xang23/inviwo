@@ -121,6 +121,7 @@ private:
     std::shared_ptr<Buffer<vec4>> bufCol_;
     std::shared_ptr<Buffer<vec4>> bufTrailPos_;
     std::shared_ptr<Buffer<uint32_t>> bufTrailCount_;
+    std::shared_ptr<Buffer<vec4>> bufTrailCol_;
 };
 
 }  // namespace inviwo

@@ -221,7 +221,6 @@ void StreamParticles::process() {
         reseed();
         advect();
     } else {
-        // Prevent a large timestep and immediate reseed after resuming.
         const auto currentTime = clock_.getElapsedSeconds();
         prevT_ = currentTime;
         reseedtime_ = currentTime;
@@ -230,9 +229,11 @@ void StreamParticles::process() {
     }
 
     meshPort_.setData(mesh_);
-    pathlinesPort_.setData(
-        std::make_shared<ParticlePathlines>(bufTrailPos_, bufTrailCount_, seeds_.getData()->size(),
-                                            static_cast<size_t>(trailLength_.get()), trailHead_));
+
+    pathlinesPort_.setData(std::make_shared<ParticlePathlines>(
+        bufTrailPos_, bufTrailCount_, bufTrailCol_, seeds_.getData()->size(),
+        static_cast<size_t>(trailLength_.get()), trailHead_, bufPos_, bufCol_));
+
     ready_ = true;
 }
 
@@ -268,6 +269,7 @@ void StreamParticles::initBuffers() {
 
     bufTrailPos_ = std::make_shared<Buffer<vec4>>(numTrailPositions, BufferUsage::Dynamic);
     bufTrailCount_ = std::make_shared<Buffer<uint32_t>>(numPoints, BufferUsage::Dynamic);
+    bufTrailCol_ = std::make_shared<Buffer<vec4>>(numTrailPositions, BufferUsage::Dynamic);
 
 
     std::mt19937 rand;
@@ -276,11 +278,12 @@ void StreamParticles::initBuffers() {
     auto& positions = bufPos_->getEditableRAMRepresentation()->getDataContainer();
     auto& lifes = bufLife_->getEditableRAMRepresentation()->getDataContainer();
     auto& trailPositions = bufTrailPos_->getEditableRAMRepresentation()->getDataContainer();
-
     auto& trailCounts = bufTrailCount_->getEditableRAMRepresentation()->getDataContainer();
+    auto& trailColor = bufTrailCol_->getEditableRAMRepresentation()->getDataContainer();
 
     std::fill(trailPositions.begin(), trailPositions.end(), vec4{0.0f});
     std::fill(trailCounts.begin(), trailCounts.end(), uint32_t{0});
+    std::fill(trailColor.begin(), trailColor.end(), vec4{0.0f});
 
     trailHead_ = 0;
 
@@ -305,6 +308,7 @@ void StreamParticles::initBuffers() {
     bufCol_->getEditableRepresentation<BufferGL>();
     bufTrailPos_->getEditableRepresentation<BufferGL>();
     bufTrailCount_->getEditableRepresentation<BufferGL>();
+    bufTrailCol_->getEditableRepresentation<BufferGL>();
 
     mesh_ = std::make_shared<Mesh>();
     mesh_->addBuffer(BufferType::PositionAttrib, bufPos_);
@@ -376,6 +380,7 @@ void StreamParticles::advect() {
     auto bufColGL = bufCol_->getEditableRepresentation<BufferGL>();
     auto bufTrailPosGL = bufTrailPos_->getEditableRepresentation<BufferGL>();
     auto bufTrailCountGL = bufTrailCount_->getEditableRepresentation<BufferGL>();
+    auto bufTrailColGL = bufTrailCol_->getEditableRepresentation<BufferGL>();
 
     shader_.activate();
 
@@ -400,6 +405,7 @@ void StreamParticles::advect() {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, bufColGL->getId());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, bufTrailPosGL->getId());
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, bufTrailCountGL->getId());
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, bufTrailColGL->getId());
 
     glDispatchCompute(static_cast<GLuint>(seeds_.getData()->size()), 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -416,6 +422,7 @@ void StreamParticles::advect() {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, 0);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, 0);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, 0);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, 0);
 }
 
 void StreamParticles::resetSimulation() {

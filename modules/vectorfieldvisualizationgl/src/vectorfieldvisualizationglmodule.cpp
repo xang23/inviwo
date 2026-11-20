@@ -43,6 +43,7 @@
 #include <modules/vectorfieldvisualizationgl/processors/3d/streamparticles.h>
 #include <modules/vectorfieldvisualizationgl/processors/3d/vector3dcurl.h>
 #include <modules/vectorfieldvisualizationgl/processors/3d/vector3ddivergence.h>
+#include <modules/vectorfieldvisualizationgl/processors/3d/particlepathlinestomesh.h>
 #include <modules/vectorfieldvisualizationgl/processors/4d/tmip.h>
 #include <modules/vectorfieldvisualizationgl/processors/datageneration/lorenzsystem.h>
 #include <modules/vectorfieldvisualizationgl/processors/datageneration/tornadogenerator.h>
@@ -81,6 +82,7 @@ VectorFieldVisualizationGLModule::VectorFieldVisualizationGLModule(InviwoApplica
     registerProcessor<VectorFieldGenerator4D>();
 
     registerProcessor<StreamParticles>();
+    registerProcessor<ParticlePathlinesToMesh>();
 }
 
 int VectorFieldVisualizationGLModule::getVersion() const { return 1; }

@@ -15,6 +15,7 @@ set(HEADER_FILES
     include/modules/vectorfieldvisualizationgl/processors/3d/streamparticles.h
     include/modules/vectorfieldvisualizationgl/processors/3d/vector3dcurl.h
     include/modules/vectorfieldvisualizationgl/processors/3d/vector3ddivergence.h
+    include/modules/vectorfieldvisualizationgl/processors/3d/particlepathlinestomesh.h
     include/modules/vectorfieldvisualizationgl/processors/4d/tmip.h
     include/modules/vectorfieldvisualizationgl/processors/datageneration/lorenzsystem.h
     include/modules/vectorfieldvisualizationgl/processors/datageneration/tornadogenerator.h
@@ -38,6 +39,7 @@ set(SOURCE_FILES
     src/processors/3d/streamparticles.cpp
     src/processors/3d/vector3dcurl.cpp
     src/processors/3d/vector3ddivergence.cpp
+    src/processors/3d/particlepathlinestomesh.cpp
     src/processors/4d/tmip.cpp
     src/processors/datageneration/lorenzsystem.cpp
     src/processors/datageneration/tornadogenerator.cpp

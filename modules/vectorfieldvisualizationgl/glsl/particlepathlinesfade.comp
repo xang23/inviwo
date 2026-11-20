@@ -1,0 +1,183 @@
+layout(local_size_x = 256,
+       local_size_y = 1,
+       local_size_z = 1) in;
+
+uniform uint particleCount;
+uniform uint trailLength;
+uniform uint trailHead;
+
+uniform float fadeFraction;
+uniform float fadeExponent;
+uniform bool generateLive;
+
+layout(std430, binding = 0) readonly buffer SourceColorBuffer {
+    vec4 sourceColors[];
+};
+layout(std430, binding = 1) readonly buffer ValidCountBuffer {
+    uint validCounts[];
+};
+layout(std430, binding = 2) writeonly buffer FadedColorBuffer {
+    vec4 fadedColors[];
+};
+layout(std430, binding = 3) writeonly buffer IndexBuffer {
+    uint indices[];
+};
+layout(std430, binding = 4) readonly buffer TrailPositionBuffer {
+    vec4 trailPositions[];
+};
+layout(std430, binding = 5) readonly buffer CurrentPositionBuffer {
+    vec4 currentPositions[];
+};
+layout(std430, binding = 6) readonly buffer CurrentColorBuffer {
+    vec4 currentColors[];
+};
+layout(std430, binding = 7) writeonly buffer LivePositionBuffer {
+    vec4 livePositions[];
+};
+layout(std430, binding = 8) writeonly buffer LiveColorBuffer {
+    vec4 liveColors[];
+};
+
+void main() {
+    const uint globalIndex = gl_GlobalInvocationID.x;
+    const uint totalSampleCount = particleCount * trailLength;
+
+    if (globalIndex >= totalSampleCount) {
+        return;
+    }
+
+    const uint particle =
+        globalIndex / trailLength;
+
+    const uint physicalSample =
+        globalIndex % trailLength;
+
+    const uint particleBase =
+        particle * trailLength;
+
+    const uint validCount =
+        min(validCounts[particle], trailLength);
+
+    const uint oldest =
+        validCount > 0u ? (trailHead + trailLength - validCount) % trailLength
+        : trailHead;
+
+    const uint logicalSample =
+        (physicalSample + trailLength - oldest) %
+        trailLength;
+    vec4 color = sourceColors[globalIndex];
+
+    if (validCount == 0u || logicalSample >= validCount) {
+        color.a = 0.0;
+    }else{
+
+    float alphaFactor = 1.0;
+
+    if (validCount > 1u && fadeFraction > 0.0) {
+
+        const float logicalPosition =
+            float(logicalSample) /
+            float(validCount - 1u);
+
+        const float fadePosition =
+            clamp(
+                logicalPosition / fadeFraction,
+                0.0,
+                1.0);
+
+        const float smoothFade =
+            fadePosition *
+            fadePosition *
+            (3.0 - 2.0 * fadePosition);
+
+        alphaFactor = pow(
+            smoothFade,
+            max(fadeExponent, 0.001));
+        }
+        color.a *= alphaFactor;
+    }
+
+    fadedColors[globalIndex] = color;
+
+    if (physicalSample + 1u < trailLength) {
+        const uint segment = physicalSample;
+
+        const uint segmentBase =
+            (particle * (trailLength - 1u) + segment) * 2u;
+
+        if (segment + 1u < validCount) {
+            const uint firstPhysical =
+                (oldest + segment) % trailLength;
+
+            const uint secondPhysical =
+                (oldest + segment + 1u) % trailLength;
+
+            indices[segmentBase] =
+                particleBase + firstPhysical;
+
+            indices[segmentBase + 1u] =
+                particleBase + secondPhysical;
+        } else {
+            /*
+             * No real segment exists in this reserved slot.
+             *
+             * Write a degenerate segment rather than stale indices.
+             */
+            const uint safePhysical =
+                validCount > 0u ? oldest : 0u;
+
+            const uint safeIndex =
+                particleBase + safePhysical;
+
+            indices[segmentBase] = safeIndex;
+            indices[segmentBase + 1u] = safeIndex;
+        }
+    }
+    
+    if (generateLive && globalIndex < particleCount) {
+        const uint liveParticle = globalIndex;
+        const uint liveBase = liveParticle * 2u;
+
+        const uint liveValidCount =
+            min(validCounts[liveParticle], trailLength);
+
+        if (liveValidCount > 0u) {
+            const uint latestPhysical =
+                (trailHead + trailLength - 1u) % trailLength;
+            const uint latestIndex =
+                liveParticle * trailLength + latestPhysical;
+
+            livePositions[liveBase] =
+                trailPositions[latestIndex];
+            livePositions[liveBase + 1u] =
+                currentPositions[liveParticle];
+
+            liveColors[liveBase] =
+                sourceColors[latestIndex];
+
+            liveColors[liveBase + 1u] =
+                currentColors[liveParticle];
+
+        } else {
+            const vec4 currentPosition =
+                currentPositions[liveParticle];
+
+            vec4 transparentColor =
+                currentColors[liveParticle];
+
+            transparentColor.a = 0.0;
+
+            livePositions[liveBase] =
+                currentPosition;
+
+            livePositions[liveBase + 1u] =
+                currentPosition;
+
+            liveColors[liveBase] =
+                transparentColor;
+
+            liveColors[liveBase + 1u] =
+                transparentColor;
+        }
+    }
+}
